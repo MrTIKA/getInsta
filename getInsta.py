@@ -11,6 +11,8 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.chrome.options import Options
 
+#TODO:
+#Make configration file for pickle locations
 
 def createDriver(headless=True):
     '''
@@ -19,52 +21,48 @@ def createDriver(headless=True):
     '''
 
     global driver
-
     chrome_options = Options()
 
     if headless:
-        print("Chrome is set to headless mode")
+        verboseprint("Chrome is set to headless mode")
         chrome_options.add_argument("--headless")
     driver = webdriver.Chrome("/users/tayfunturanligil/Documents/chromedriver",chrome_options=chrome_options)
 
-def logIn(ttikat=False):
+def logIn():
     '''
         load the cookies or handle login for the defaulth account, or secondary account
         arguments: ttikat: bool - if set to true, it will log in as that account
     '''
-    if ttikat:
-        print("Using ttikat")
-        username = 'ttikat'
-    else:
-        username ='tayfunforreal' 
-
-    password = ''
 
     #Driver has to have done something before we can load cookies, so I ust call google
     driver.get('https://www.google.com')
 
+    #this path will work on any OS and added for github. 
+	#In my computer I hard coded my path for simlicity
+    cookiePath = pathlib.Path(__file__).parent / 'getInstaCookies.pkl'
+
     try:
-        if ttikat:
-            cookies = pickle.load(open("/users/tayfunturanligil/Documents/getInstaTtikatCookies.pkl", "rb"))
-        else:
-            cookies = pickle.load(open("/users/tayfunturanligil/Documents/getInstaCookies.pkl", "rb"))
+    	cookies = pickle.load(open("/users/tayfunturanligil/Documents/getInstaTtikatCookies.pkl", "rb"))
 
     except Exception as e:
         print('Failed to find cookie pickle, will create a new one')
         print(e)
 
+        username = input("Instagram username: ")
+        password = getpass("Password (will not show when typing):")
+
         driver.get("https://www.instagram.com/accounts/login/?source=auth_switcher")
-        sleep( waitMultiplyer *1)
+        sleep( waitMultiplyer * 1)
         try:
             driver.find_element_by_name("username").send_keys(username)
             driver.find_element_by_name("password").send_keys(password)
             driver.find_element_by_name("password").send_keys(Keys.ENTER)    
-            sleep( waitMultiplyer *1)
+            sleep(waitMultiplyer * 1)
             driver.find_element_by_class_name("coreSpriteSearchIcon")
             driver.get('https://www.instagram.com/' + usernameString + '/')
             pickle.dump( driver.get_cookies() , open("/users/tayfunturanligil/Documents/getInstaCookies.pkl","wb"))
 
-            print("Logged in")
+            verboseprint("Logged in")
 
         except Exception as e2:
             print("Failed to log in.")
@@ -73,7 +71,7 @@ def logIn(ttikat=False):
             driver.quit()
             quit()
 
-    print("Cookies loading...")
+    verboseprint("Cookies loading...")
     for cookie in cookies:
         driver.add_cookie(cookie)
 
@@ -88,46 +86,19 @@ def goToProfilePage(usernameString,postNo,tagged):
         driver.get('https://www.instagram.com/' + usernameString + '/tagged')
     else:
         driver.get('https://www.instagram.com/' + usernameString + '/')
-        numberOfPosts = getNumberOfPosts()
-
-        #rare edge case, but if you ask for a post index higher than the num posts it will ask again
-        while numberOfPosts < (postNo):
-            print(usernameString + " has " + str(numberOfPosts) + " posts")
-            print("You asked for post " + str(postNo))
-            postNo = input("Enter post index you want: ")
-            try:
-                postNo = int(postNo)
-            except:
-                print("Not a number, halting execution")
-                driver.quit()
-                quit()
 
     sleep(waitMultiplyer *1)
 
     if driver.find_elements_by_css_selector(".v1Nh3 a") == []:
         print("No posts found for " + usernameString)
-        print("Profile page is probably private")
+        print("Profile page can be private, or does not exist")
         print("Halting execution")
         driver.quit()
         quit()
 
-    print("On profile page")
+    verboseprint("On profile page")
 
-def getNumberOfPosts():
-    '''
-        ust gets the number of posts from the profile 'headder' (instagram is probably gonna remove that info in the future)
-    '''
-    try:
-        numPosts = float(driver.find_elements_by_class_name('g47SY')[0].text.replace(',', ''))
-        return numPosts
-    except Exception as e:
-        print('Failed to get number of posts:')
-        print(e)
-        print("Halting execution")
-        driver.quit()
-        quit()
-
-def clickOnPost(postNo=1):
+def GoToPost(postNo=1):
     try:
         sleep(waitMultiplyer *1)
         imageLinks = list(driver.find_elements_by_css_selector(".v1Nh3 a"))
@@ -149,7 +120,9 @@ def clickOnPost(postNo=1):
             numScrolls += 1
 
         imageLinks[postNo-1].click()
-        sleep(waitMultiplyer *.5)
+        sleep(waitMultiplyer * 0.5)
+        driver.refresh()
+
 
     except Exception as e:
         print('Failed to click on post: ' + str(postNo))
@@ -158,21 +131,19 @@ def clickOnPost(postNo=1):
         driver.quit()
         quit()
 
-    print("Getting post " + str(postNo))
 
-def getPageAtIndex(indexToGet, usernameString):
+def goToPageIndex(indexToGet, usernameString):
     '''
         gets the spesified indexed page in a post
     '''
-    print("Getting a single page at index: " + str(indexToGet))
+    verboseprint("Getting a single page at index: " + str(indexToGet))
+
     currentPageIndex = 0
     while currentPageIndex < indexToGet:
         driver.find_elements_by_class_name('coreSpriteRightChevron')[0].click()
         currentPageIndex += 1
-        sleep( waitMultiplyer *1)
+        sleep(waitMultiplyer * 1)
 
-    img = driver.find_elements_by_tag_name('img')[min((indexToGet+1),2)]
-    getSinglePost(indexToGet, img, usernameString)
 
 
 def getAllPossiblePages(usernameString):
@@ -189,7 +160,7 @@ def getAllPossiblePages(usernameString):
             fileNameSuffix = 'multi'
 
         img = driver.find_elements_by_tag_name('img')[min((pageNo+1),2)]
-        getSinglePost(pageNo, img, usernameString, fileNameSuffix)
+        getSinglePage(pageNo, img, usernameString, fileNameSuffix)
 
         if morePagesExist:
             driver.find_elements_by_class_name('coreSpriteRightChevron')[0].click()
@@ -202,25 +173,26 @@ def getAllPossiblePages(usernameString):
 
 def isThereMorePages():
     """
-        Check's if there are more pages in the post bu checking if is there a next button
+        Check's if there are more pages in the post by checking if is there a next button
     """
     sleep(waitMultiplyer *.5)
     nextbutton = driver.find_elements_by_class_name('coreSpriteRightChevron')
 
     if nextbutton != []:
-        print('More pages detected!')
+        print('More pages exist')
         return True   
     else:
         return False
 
-def getSinglePost(pageNo, img, usernameString, fileNameSuffix=''):
+def getSinglePage(pageNo, usernameString, fileNameSuffix=''):
     '''
-        gets a single post from a potentially multi page post
+        gets a single page from a potentially multi page post
         pageNo: int - which page it is getting, for printing debug info
                 img: selenium object - the post we are on (asuming img at first but checking if video)
                 usernameString: String - username we are on ,for printing debug info
                 fileNameSuffix: String - username we are on ,for printing debug info
     '''
+
     try:
         video = driver.find_element_by_class_name('tWeCl') # Class tWeCl only used for videos
         print('Page '+ str(pageNo) + ' is a video')
@@ -228,6 +200,7 @@ def getSinglePost(pageNo, img, usernameString, fileNameSuffix=''):
         isVideo = True
     except:
         try:
+        	img = driver.find_elements_by_tag_name('img')[min((indexToGet+1),2)]
             allLinks = img.get_attribute("srcset");
             link = allLinks.split(" ")[-2]
             link_final = link.split(",")[-1].replace("s","",1)
@@ -242,15 +215,15 @@ def getSinglePost(pageNo, img, usernameString, fileNameSuffix=''):
             print(e)
             driver.quit()
 
-    print("Got the link for page " + str(pageNo) + "!")
+    verboseprint("Got the link for page " + str(pageNo) + "!")
 
     #this part works fow downloading both images and video. downloading an image can
-    # be done using a one liner, but since I need video anyway I use this for both
+    # be done using a one-liner, but since I need video anyway I use this for both
     try:
         path = makePathFor(usernameString, isVideo, fileNameSuffix)
         r = requests.get(link_final, stream=True)
         with open(path, 'wb') as f:
-            print('Saving file')
+            verboseprint('Saving file')
             for chunk in r.iter_content(chunk_size=1024):
                 if chunk:
                     f.write(chunk)
@@ -258,10 +231,10 @@ def getSinglePost(pageNo, img, usernameString, fileNameSuffix=''):
         if openImage:
             subprocess.call(['open', path])
 
-    except Exception as e3:
+    except Exception as e:
         print("Failed to save file. Here is the link: ")
         print(link_final)
-        print(e3)
+        print(e)
         driver.quit()
         return
 
@@ -270,14 +243,16 @@ def makePathFor(usernameString, isVideo, fileNameSuffix):
         Creates a path and filename for the saved file.
         all the arguments are part of the name path
     '''
-    usernameString = usernameString[:3]
-    #usernameString = 'test'
-    if isVideo:
-        usernameString += 'V'
+    #usernameString = 'test' #for debugging
+
+    #this path will work on any OS and added for github. 
+	#In my computer I hard coded my path for simlicity
+	pickleFilePath = pathlib.Path(__file__).parent / 'lastPaths.pkl'
 
     #I keep thack of the usernames las index in a picke and increment it for each downloaded post
     try:
-        lastPaths = pickle.load(open("/users/tayfunturanligil/Documents/lastPaths.pkl", "rb"))
+
+        lastPaths = pickle.load(open(pickleFilePath, "rb"))
         if usernameString in lastPaths:
             no = lastPaths[usernameString]
             no += 1
@@ -297,90 +272,89 @@ def makePathFor(usernameString, isVideo, fileNameSuffix):
 
     path += '.mov' if isVideo else '.jpeg'
 
-    pickle.dump(lastPaths ,open("/users/tayfunturanligil/Documents/lastPaths.pkl","wb"))
+    pickle.dump(lastPaths ,open("pickleFilePath","wb"))
     print("File name is: " + usernameString + str(no))
     return path
 
 
 
 
-def main(usernamesList, postNo=[1], headless=True, openImage=True, use_ttikat=False, tagged=False, postIndex=-1):
+
+def main(usernamesList, postNo=[1], isHeadless=True, openImage=True, logIn=True, tagged=False, postIndex=-1):
 
     try:
-        createDriver(headless)
-        logIn(use_ttikat)
+        createDriver(isHeadless)
+
+        if logIn:
+        	logIn()
+
         for username in usernamesList:
             for post in postNo:
-                post = int(post)
+
                 goToProfilePage(username,post,tagged)
-                clickOnPost(post)
-                driver.refresh()
+                GoToPost(post)
+
                 if postIndex > -1:
-                    getPageAtIndex(postIndex, username)
+                    goToPageIndex(postIndex, username)
+                    getSinglePage(indexToGet, img, username)
+
                 else:
                     getAllPossiblePages(username)
 
-        driver.quit()
-        print("Done!")
+        verboseprint("Done!")
 
     except Exception as e:
         print("Something terrible has hapened in main")
         print(e)
-        driver.quit()
+
+    finally:
+    	    driver.quit()
 
 
 
+'''
+The main script:
+'''
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("-n", "--name", help="usernames to get. If have multiple, seperate with ',' and no spaces")
-parser.add_argument("-m", action="store_true")
-parser.add_argument("-a", action="store_true")
-parser.add_argument("-l", action="store_true")
-parser.add_argument("-r", action="store_true")
-parser.add_argument("-c", action="store_true")
-parser.add_argument("-o", action="store_true")
-parser.add_argument("-e", action="store_true")
+parser.add_argument("-n", "--names", help="usernames to get", nargs='+')
 
-parser.add_argument("-d","--dont", help="dont open the image", action="store_true")
+parser.add_argument("-g", help="add natgeo to names", action="store_true")
+parser.add_argument("-t", help="add developers_team to names", action="store_true")
+parser.add_argument("-o", help="add officialfstoppers to names", action="store_true")
+
+parser.add_argument("-d","--dont", help="dont open the posts after download", action="store_true")
 
 parser.add_argument("--i", help="which image to get", default='1', nargs='?')
-parser.add_argument("--wm", help="wait multiplier for slower connection", type=int, default=1, nargs='?')
-
-parser.add_argument("--headly", help="Do not run in headless mode", action="store_true")
 parser.add_argument("--ttikat", help="use ttikat account instead", action="store_true")
 parser.add_argument("--tagged", help="get tagged pictures", action="store_true")
 parser.add_argument("--index", help="index of the post", type=int, default=-1, nargs='?')
 
+parser.add_argument("--wm", help="wait multiplier for slower connection", type=int, default=1, nargs='?')
+parser.add_argument("--headly", help="Do not run in headless mode", action="store_true")
+parser.add_argument("-v", "--verbose", help="increase output verbosity", action="store_true")
+
 args = vars(parser.parse_args())
 
 usernames = []
-
-if args["a"]:
-    usernames += ['']
-if args["m"]:
-    usernames += ['']
-if args["l"]:
-    usernames += ['']
-if args["r"]:
-    usernames += ['']
-if args["c"]:
-    usernames += ['']
+if args["g"]:
+    usernames += ['natgeo']
+if args["t"]:
+    usernames += ['developers_team']
 if args["o"]:
-    usernames += ['']
-if args["e"]:
-    usernames += ['']
-    args['ttikat'] = True
+    usernames += ['officialfstoppers']
 
 if args["name"]:
     usernames += args["name"].split(',')
-    print("Getting for all users here: " + str(usernames))
+    verboseprint("Getting for all users here: " + str(usernames))
 
 if args["i"] is None:
     indexes = ['1']
 else:
     indexes = args["i"].split(',')
-    print("Getting posts at indexes: " + str(indexes))
+    indexes = list(map(int, indexes))
+    verboseprint("Getting posts at indexes: " + str(indexes))
 
 if args["index"] is None:
     index = -1
@@ -392,6 +366,8 @@ openImage = not args["dont"]
 use_ttikat = args['ttikat']
 tagged = args['tagged']
 waitMultiplyer = args['wm']
+
+verboseprint = print if verbose else lambda *a, **k: None
 
 main(usernames, indexes ,headless, openImage, use_ttikat, tagged, index)
 
