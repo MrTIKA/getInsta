@@ -6,6 +6,7 @@ import argparse
 import requests
 import subprocess
 import pathlib
+from functools import partial
 from time import sleep
 
 import selenium.webdriver as webdriver
@@ -33,7 +34,6 @@ def createDriver(headless):
 def logIn():
 	'''
 		load the cookies or handle login for the defaulth account, or secondary account
-		arguments: ttikat: bool - if set to true, it will log in as that account
 	'''
 
 	#Driver has to have done something before we can load cookies, so I ust call google
@@ -77,7 +77,7 @@ def logIn():
 	for cookie in cookies:
 		driver.add_cookie(cookie)
 
-def goToProfilePage(username,postNo,tagged):
+def goToProfilePage(username,tagged):
 	'''
 		Go to the instagram page of given username
 		argumests: username: String - the username of the profile to go
@@ -100,7 +100,7 @@ def goToProfilePage(username,postNo,tagged):
 
 	verboseprint("On profile page")
 
-def GoToPost(postNo):
+def goToPost(postNo):
 	try:
 		sleep(waitMultiplyer *1)
 		imageLinks = list(driver.find_elements_by_css_selector(".v1Nh3 a"))
@@ -134,7 +134,7 @@ def GoToPost(postNo):
 		quit()
 
 
-def goToPageIndex(pageIndex, username):
+def goToPageIndex(pageIndex):
 	'''
 		gets the spesified indexed page in a post
 	'''
@@ -148,8 +148,7 @@ def goToPageIndex(pageIndex, username):
 		sleep(waitMultiplyer * 1)
 
 
-
-def getAllPossiblePages(username):
+def getAllPossiblePages():
 	'''
 		gets all pages in a post
 	'''
@@ -163,7 +162,7 @@ def getAllPossiblePages(username):
 			fileNameSuffix = 'multi'
 
 		img = driver.find_elements_by_tag_name('img')[min((pageNo+1),2)]
-		getSinglePage(pageNo, username, fileNameSuffix)
+		getSinglePage(pageNo, fileNameSuffix)
 
 		if morePagesExist:
 			driver.find_elements_by_class_name('coreSpriteRightChevron')[0].click()
@@ -171,7 +170,6 @@ def getAllPossiblePages(username):
 			pageNo += 1
 			morePagesExist = isThereMorePages()
 			continue
-
 		break
 
 def isThereMorePages():
@@ -187,18 +185,17 @@ def isThereMorePages():
 	else:
 		return False
 
-def getSinglePage(pageIndex, username, fileNameSuffix=''):
+def getSinglePage(pageIndex, fileNameSuffix=''):
 	'''
 		gets a single page from a potentially multi page post
-		pageIndex: int - which page it is getting, for printing debug info
+		pageIndex: int - need to find the image link becaus insta caches multiple image links in a list
 				img: selenium object - the post we are on (asuming img at first but checking if video)
-				username: String - username we are on ,for printing debug info
-				fileNameSuffix: String - username we are on ,for printing debug info
+				fileNameSuffix: String - I like to spesify multi page posts
 	'''
 
 	try:
 		video = driver.find_element_by_class_name('tWeCl') # Class tWeCl only used for videos
-		print('Page '+ str(pageIndex) + ' is a video')
+		verboseprint('Page '+ str(pageIndex) + ' is a video')
 		link_final = video.get_attribute("src")
 		isVideo = True
 
@@ -214,7 +211,6 @@ def getSinglePage(pageIndex, username, fileNameSuffix=''):
 			print(e)
 			print("pageIndex = " + str(pageIndex))
 			print("img = " + str(img.text))
-			print("username = " + str(username))
 			print("fileNameSuffix = " + str(fileNameSuffix))
 			print()
 			driver.quit()
@@ -224,7 +220,7 @@ def getSinglePage(pageIndex, username, fileNameSuffix=''):
 	#this part works fow downloading both images and video. downloading an image can
 	# be done using a one-liner, but since I need video anyway I use this for both
 	try:
-		pathToSave = makePathFor(username, isVideo, fileNameSuffix)
+		pathToSave = partialMakePathFor(isVideo, fileNameSuffix)
 		r = requests.get(link_final, stream=True)
 		with open(pathToSave, 'wb') as f:
 			verboseprint('Saving file')
@@ -289,8 +285,14 @@ def makePathFor(username, isVideo, fileNameSuffix):
 
 
 
-
-def main(usernamesList, postIndexes=[1], isHeadless=True, openImage=True, needLogIn=True, tagged=False, pageIndex=-1):
+def main(
+		usernamesList=[], 
+		postIndexes=[1], 
+		isHeadless=True, 
+		openImage=True, 
+		needLogIn=True, 
+		tagged=False, 
+		pageIndex=-1):
 
 	try:
 		createDriver(isHeadless)
@@ -301,15 +303,15 @@ def main(usernamesList, postIndexes=[1], isHeadless=True, openImage=True, needLo
 		for username in usernamesList:
 			for postIndex in postIndexes:
 
-				goToProfilePage(username,postIndex,tagged)
-				GoToPost(postIndex)
+				goToProfilePage(username,tagged)
+				goToPost(postIndex)
 
+				partialMakePathFor = partial(makePathFor(username))
 				if pageIndex > -1:
-					goToPageIndex(pageIndex, username)
-					getSinglePage(pageIndex, img, username)
-
+					goToPageIndex(pageIndex)
+					getSinglePage(pageIndex)
 				else:
-					getAllPossiblePages(username)
+					getAllPossiblePages()
 
 		verboseprint("Done!")
 
@@ -337,7 +339,7 @@ parser.add_argument("-o", help="add officialfstoppers to names", action="store_t
 parser.add_argument("-d","--dont", help="dont open the posts after download", action="store_true")
 
 parser.add_argument("--i", help="which images to get, first image is 1. list numbers with comas in between", default='1', nargs='?')
-parser.add_argument("--ttikat", help="use ttikat account instead", action="store_true")
+parser.add_argument("--guest", help="do not rqure log in", action="store_true")
 parser.add_argument("--tagged", help="get tagged pictures", action="store_true")
 parser.add_argument("--page", help="index of the page, 0 is first page, defauth is get all pages of post", type=int, default=-1, nargs='?')
 
@@ -374,16 +376,14 @@ else:
 	pageIndex = args["page"]
 
 
-
-
 headless = not args["headly"]
 openImage = not args["dont"]
-use_ttikat = args['ttikat']
+guest = args['guest']
 tagged = args['tagged']
 waitMultiplyer = args['wm']
 
 
-main(usernames, postIndexes ,headless, openImage, use_ttikat, tagged, pageIndex)
+main(usernames, postIndexes ,headless, openImage, guest, tagged, pageIndex)
 
 
 
